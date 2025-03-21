@@ -1,0 +1,8 @@
+ovh_application_key    = "your_application_key_here"
+ovh_application_secret = "your_application_secret_here"
+ovh_consumer_key       = "your_consumer_key_here"
+os_tenant_id           = "your_tenant_id_here"
+os_tenant_name         = "your_tenant_name_here"
+os_username            = "your_username_here"
+os_password            = "" # Will be prompted during terraform apply if left empty
+ssh_key_pair           = "your_keypair_name_here" 
