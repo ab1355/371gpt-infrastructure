@@ -17,10 +17,17 @@ This infrastructure repository is a component of the larger [371GPT system](http
 
 ## Architecture Components
 
+### Core Infrastructure
 - **371GPT Core**: Main AI orchestration service with multiple specialized agents
 - **XPipe Server**: Data pipeline management for knowledge processing
 - **Supabase**: Database with vector capabilities (replacing PostgreSQL + MongoDB)
 - **Kespa**: Automation service for workflow orchestration
+
+### Application Components
+- **FastAPI Gateway**: Internal API gateway for agent communication
+- **Agenta**: Development environment for creating and testing AI agents
+- **NocoDB**: No-code database for configuration management
+- **NiceGUI**: Web-based admin interface for system management
 
 ## Documentation
 
@@ -98,10 +105,29 @@ The infrastructure includes:
 
 ## Resource Specifications
 
+### Core Resources
 - **GPT Core**: s1-8 instance (8 vCPUs, 16GB RAM)
 - **Supabase**: s1-8 instance with 200GB storage
 - **XPipe**: s1-4 instance (4 vCPUs, 8GB RAM)
 - **Kespa**: s1-4 instance (4 vCPUs, 8GB RAM) with 50GB storage
+
+### Application Resources
+- **FastAPI Gateway**: s1-4 instance (4 vCPUs, 8GB RAM)
+- **Agenta**: s1-8 instance (8 vCPUs, 16GB RAM) with 100GB storage
+- **NocoDB**: s1-4 instance (4 vCPUs, 8GB RAM) with 50GB storage
+- **NiceGUI**: s1-4 instance (4 vCPUs, 8GB RAM)
+
+## Networking
+
+The infrastructure is configured with:
+
+- **Private Network**: All services communicate over a secure 192.168.1.0/24 network
+- **Security Groups**: Firewall rules limit access to appropriate services
+- **Open Ports**:
+  - SSH (22) - Admin access
+  - HTTP/HTTPS (80/443) - Web interfaces
+  - Application ports (8000, 8080, 8081, 8090) - Service APIs
+  - Database port (5432) - Limited to internal network
 
 ## Maintenance
 
@@ -142,4 +168,13 @@ For information on implementing this system for business purposes, refer to:
 
 ## Monitoring & Management
 
-Access IP addresses for each service will be displayed in the outputs after successful deployment. 
+Access IP addresses for each service will be displayed in the outputs after successful deployment.
+
+### Service Access URLs
+
+After deployment, services can be accessed at:
+
+- **NiceGUI Admin**: `http://<nicegui_ip>:8080`
+- **Agenta Development**: `http://<agenta_ip>:8090`
+- **NocoDB**: `http://<nocodb_ip>:8081`
+- **FastAPI Gateway**: `http://<fastapi_gateway_ip>:8000` 

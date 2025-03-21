@@ -34,4 +34,25 @@ output "supabase_ip" {
 output "kespa_ip" {
   value       = openstack_compute_instance_v2.kespa.access_ip_v4
   description = "IP address of the Kespa automation server"
+}
+
+# New application outputs
+output "fastapi_gateway_ip" {
+  value       = openstack_compute_instance_v2.fastapi_gateway.access_ip_v4
+  description = "IP address of the FastAPI Gateway server"
+}
+
+output "agenta_ip" {
+  value       = openstack_compute_instance_v2.agenta.access_ip_v4
+  description = "IP address of the Agenta development environment"
+}
+
+output "nocodb_ip" {
+  value       = openstack_compute_instance_v2.nocodb.access_ip_v4
+  description = "IP address of the NocoDB server"
+}
+
+output "nicegui_ip" {
+  value       = openstack_compute_instance_v2.nicegui.access_ip_v4
+  description = "IP address of the NiceGUI admin interface"
 } 

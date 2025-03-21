@@ -55,6 +55,38 @@ resource "openstack_compute_secgroup_v2" "secgroup" {
     ip_protocol = "tcp"
     cidr        = "0.0.0.0/0"
   }
+  
+  # FastAPI Gateway port
+  rule {
+    from_port   = 8000
+    to_port     = 8000
+    ip_protocol = "tcp"
+    cidr        = "0.0.0.0/0"
+  }
+  
+  # NiceGUI admin interface port
+  rule {
+    from_port   = 8080
+    to_port     = 8080
+    ip_protocol = "tcp"
+    cidr        = "0.0.0.0/0"
+  }
+  
+  # Agenta development environment port
+  rule {
+    from_port   = 8090
+    to_port     = 8090
+    ip_protocol = "tcp"
+    cidr        = "0.0.0.0/0"
+  }
+  
+  # NocoDB port
+  rule {
+    from_port   = 8081
+    to_port     = 8081
+    ip_protocol = "tcp"
+    cidr        = "0.0.0.0/0"
+  }
 }
 
 # instances.tf - Start with core components

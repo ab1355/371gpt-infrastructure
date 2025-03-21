@@ -67,6 +67,27 @@ This guide provides step-by-step instructions for deploying the 371GPT infrastru
      - Network configuration details
    - Save these for the next steps
 
+### Infrastructure Components
+
+The deployed infrastructure includes:
+
+1. **Core Components**:
+   - **371GPT Core** - Main application server
+   - **XPipe Server** - Data pipeline management
+   - **Supabase** - Vector database and storage
+   - **Kespa** - Automation server
+
+2. **Application Components** (New):
+   - **FastAPI Gateway** - Internal API gateway for agent communication
+   - **Agenta Development Environment** - For agent creation and testing
+   - **NocoDB** - Configuration management database
+   - **NiceGUI Admin Interface** - Web-based administration panel
+
+3. **Networking**:
+   - Private network for secure inter-service communication
+   - Security groups for controlled access to services
+   - Public endpoints for user-facing services
+
 ## 2. Application Deployment
 
 After deploying the infrastructure, you need to deploy the application components from the main 371GPT repository.
@@ -102,6 +123,10 @@ After deploying the infrastructure, you need to deploy the application component
      # Service endpoints (from infrastructure outputs)
      XPIPE_HOST=<xpipe_instance_ip>
      XPIPE_PORT=8080
+     FASTAPI_GATEWAY=<fastapi_gateway_ip>:8000
+     NOCODB_HOST=<nocodb_ip>:8081
+     AGENTA_HOST=<agenta_ip>:8090
+     NICEGUI_ADMIN=<nicegui_ip>:8080
      
      # API credentials (from your providers)
      OPENAI_API_KEY=<your_openai_key>
@@ -143,8 +168,8 @@ After deploying both infrastructure and applications, you need to configure them
 
 ### Step-by-Step Configuration
 
-1. **Access the admin interface**:
-   - Navigate to the UI service: `http://<ui_instance_ip>:8000`
+1. **Access the NiceGUI admin interface**:
+   - Navigate to the admin UI: `http://<nicegui_ip>:8080`
    - Login with the default credentials (see `docs/admin-guide.md` in the main repository)
 
 2. **Configure service connections**:
@@ -152,14 +177,25 @@ After deploying both infrastructure and applications, you need to configure them
    - Update the service endpoints with the values from the infrastructure deployment
    - Save the configuration
 
-3. **Initialize the system**:
+3. **Setup Agenta for agent development**:
+   - Access Agenta at `http://<agenta_ip>:8090`
+   - Create your agent templates and flows
+   - For detailed instructions, see `docs/agent-development.md` in the main repository
+
+4. **Configure NocoDB**:
+   - Access NocoDB at `http://<nocodb_ip>:8081`
+   - Set up the required tables for configuration management
+   - Import initial configuration data
+   - Connect NocoDB to the FastAPI Gateway
+
+5. **Initialize the system**:
    - In the admin interface, run the "System Initialization" workflow
    - This will:
      - Set up the database schema
      - Configure the agent orchestration
      - Initialize the knowledge base
 
-4. **Test the deployment**:
+6. **Test the deployment**:
    - Follow the testing procedures in `docs/testing-guide.md` in the main repository
    - Verify all services are communicating correctly
 
@@ -192,7 +228,7 @@ After deploying both infrastructure and applications, you need to configure them
 ### Monitoring
 
 1. **Check system logs**:
-   - Access the log viewer at `http://<ui_instance_ip>:8000/logs`
+   - Access the log viewer at `http://<nicegui_ip>:8080/logs`
    - Monitor for any errors or warnings
 
 2. **Infrastructure health**:
