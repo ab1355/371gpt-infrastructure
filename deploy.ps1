@@ -1,109 +1,318 @@
-# Deployment script for 371GPT infrastructure on Windows
-# Requires PowerShell 7.0 or later
+# 371GPT Infrastructure Deployment Script
+# This script handles the complete deployment process for the 371GPT infrastructure
+param(
+    [switch]$Force,
+    [switch]$AutoApprove,
+    [switch]$SkipValidation,
+    [switch]$Cleanup
+)
 
-# Stop on any error
+# Variables
 $ErrorActionPreference = "Stop"
+$startTime = Get-Date
+$logFile = "deployment_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+$terraformPlanFile = "tfplan"
 
-# Function to check if a command exists
-function Test-Command($cmdname) {
-    return [bool](Get-Command -Name $cmdname -ErrorAction SilentlyContinue)
+# Function to log messages
+function Write-Log {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("INFO", "WARNING", "ERROR", "SUCCESS")]
+        [string]$Level = "INFO"
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] [$Level] $Message"
+    
+    # Set console color based on level
+    switch ($Level) {
+        "INFO" { $color = "White" }
+        "WARNING" { $color = "Yellow" }
+        "ERROR" { $color = "Red" }
+        "SUCCESS" { $color = "Green" }
+        default { $color = "White" }
+    }
+    
+    # Output to console
+    Write-Host $logMessage -ForegroundColor $color
+    
+    # Append to log file
+    Add-Content -Path $logFile -Value $logMessage
 }
 
-# Verify prerequisites
-$prerequisites = @{
-    "terraform" = "Terraform"
-    "git" = "Git"
+# Function to check prerequisites
+function Test-Prerequisites {
+    Write-Log "Checking prerequisites..." "INFO"
+    
+    # Check if Terraform is installed
+    try {
+        $tfVersion = terraform --version
+        Write-Log "Terraform is installed: $($tfVersion -split "`n" | Select-Object -First 1)" "SUCCESS"
+    } catch {
+        Write-Log "Terraform is not installed or not in PATH" "ERROR"
+        return $false
+    }
+    
+    # Check if terraform.tfvars exists
+    if (Test-Path -Path "terraform.tfvars") {
+        Write-Log "terraform.tfvars file exists" "SUCCESS"
+    } else {
+        Write-Log "terraform.tfvars file not found" "ERROR"
+        return $false
+    }
+    
+    # Check if main Terraform files exist
+    $requiredFiles = @("main.tf", "variables.tf", "network.tf")
+    $missingFiles = $requiredFiles | Where-Object { -not (Test-Path $_) }
+    
+    if ($missingFiles.Count -eq 0) {
+        Write-Log "All required Terraform files exist" "SUCCESS"
+    } else {
+        Write-Log "Some required Terraform files are missing:" "ERROR"
+        $missingFiles | ForEach-Object { Write-Log "  - $_" "ERROR" }
+        return $false
+    }
+    
+    return $true
 }
 
-foreach ($cmd in $prerequisites.Keys) {
-    if (-not (Test-Command -cmdname $cmd)) {
-        Write-Error "Required tool $($prerequisites[$cmd]) is not installed. Please run setup-terraform.ps1 first."
-        exit 1
+# Function to validate credentials
+function Test-Credentials {
+    Write-Log "Validating credentials..." "INFO"
+    
+    if ($SkipValidation) {
+        Write-Log "Credential validation skipped due to -SkipValidation flag" "WARNING"
+        return $true
+    }
+    
+    if (Test-Path -Path "verify_ovh.ps1") {
+        try {
+            $output = & ".\verify_ovh.ps1" 2>&1
+            
+            # Check for success in the output
+            if ($output -match "OVH API credentials are valid" -or $Force) {
+                Write-Log "Credentials validated successfully or force flag used" "SUCCESS"
+                return $true
+            } else {
+                Write-Log "Credential validation failed" "ERROR"
+                $output | ForEach-Object { Write-Log $_ "INFO" }
+                return $false
+            }
+        } catch {
+            Write-Log "Error running validation script: $_" "ERROR"
+            return $false
+        }
+    } else {
+        Write-Log "Verification script not found. Cannot validate credentials." "WARNING"
+        if ($Force) {
+            Write-Log "Proceeding anyway due to -Force flag" "WARNING"
+            return $true
+        }
+        return $false
     }
 }
 
-# Function to handle errors
-function Handle-Error {
-    param($ErrorMessage)
-    Write-Error $ErrorMessage
+# Function to initialize Terraform
+function Initialize-TerraformEnvironment {
+    Write-Log "Initializing Terraform environment..." "INFO"
+    
+    try {
+        $output = terraform init -reconfigure 2>&1
+        $output | ForEach-Object { Write-Log $_ "INFO" }
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Terraform environment initialized successfully" "SUCCESS"
+            return $true
+        } else {
+            Write-Log "Terraform initialization failed with exit code: $LASTEXITCODE" "ERROR"
+            return $false
+        }
+    } catch {
+        Write-Log "Exception during Terraform initialization: $_" "ERROR"
+        return $false
+    }
+}
+
+# Function to validate Terraform configuration
+function Test-TerraformConfiguration {
+    Write-Log "Validating Terraform configuration..." "INFO"
+    
+    try {
+        $output = terraform validate 2>&1
+        $output | ForEach-Object { Write-Log $_ "INFO" }
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Terraform configuration is valid" "SUCCESS"
+            return $true
+        } else {
+            Write-Log "Terraform configuration is invalid" "ERROR"
+            return $false
+        }
+    } catch {
+        Write-Log "Exception during Terraform validation: $_" "ERROR"
+        return $false
+    }
+}
+
+# Function to create Terraform plan
+function New-TerraformPlan {
+    Write-Log "Creating Terraform plan..." "INFO"
+    
+    try {
+        $output = terraform plan -out="$terraformPlanFile" 2>&1
+        $output | ForEach-Object { Write-Log $_ "INFO" }
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "Terraform plan created successfully" "SUCCESS"
+            return $true
+        } else {
+            Write-Log "Failed to create Terraform plan" "ERROR"
+            return $false
+        }
+    } catch {
+        Write-Log "Exception during Terraform plan creation: $_" "ERROR"
+        return $false
+    }
+}
+
+# Function to apply Terraform plan
+function Invoke-TerraformApply {
+    Write-Log "Applying Terraform plan..." "INFO"
+    
+    $applyCmd = "terraform apply"
+    if ($AutoApprove) {
+        $applyCmd += " -auto-approve"
+    } else {
+        $applyCmd += " `"$terraformPlanFile`""
+    }
+    
+    try {
+        $process = Start-Process -FilePath "powershell.exe" -ArgumentList "-Command $applyCmd" -NoNewWindow -PassThru -Wait
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Log "Terraform resources applied successfully" "SUCCESS"
+            return $true
+        } else {
+            Write-Log "Failed to apply Terraform resources (Exit code: $($process.ExitCode))" "ERROR"
+            return $false
+        }
+    } catch {
+        Write-Log "Exception during Terraform apply: $_" "ERROR"
+        return $false
+    }
+}
+
+# Function to cleanup resources in case of failure
+function Remove-Resources {
+    if ($Cleanup) {
+        Write-Log "Cleaning up deployed resources..." "WARNING"
+        
+        $destroyCmd = "terraform destroy"
+        if ($AutoApprove) {
+            $destroyCmd += " -auto-approve"
+        }
+        
+        try {
+            $process = Start-Process -FilePath "powershell.exe" -ArgumentList "-Command $destroyCmd" -NoNewWindow -PassThru -Wait
+            
+            if ($process.ExitCode -eq 0) {
+                Write-Log "Resources cleaned up successfully" "SUCCESS"
+            } else {
+                Write-Log "Failed to clean up resources (Exit code: $($process.ExitCode))" "ERROR"
+            }
+        } catch {
+            Write-Log "Exception during resource cleanup: $_" "ERROR"
+        }
+    } else {
+        Write-Log "Resource cleanup skipped. Use -Cleanup flag to destroy resources on failure." "INFO"
+    }
+}
+
+# Function to show deployment summary
+function Show-Summary {
+    param (
+        [bool]$Success
+    )
+    
+    $endTime = Get-Date
+    $duration = $endTime - $startTime
+    
+    Write-Log "===============================================" "INFO"
+    Write-Log "371GPT Infrastructure Deployment Summary" "INFO"
+    Write-Log "===============================================" "INFO"
+    Write-Log "Start Time: $startTime" "INFO"
+    Write-Log "End Time: $endTime" "INFO"
+    Write-Log "Duration: $($duration.ToString('hh\:mm\:ss'))" "INFO"
+    
+    if ($Success) {
+        Write-Log "Deployment Status: SUCCESS" "SUCCESS"
+        Write-Log "All infrastructure components deployed successfully" "SUCCESS"
+    } else {
+        Write-Log "Deployment Status: FAILED" "ERROR"
+        Write-Log "Deployment failed. Check the log file for details: $logFile" "ERROR"
+    }
+    
+    Write-Log "===============================================" "INFO"
+}
+
+# Main deployment process
+Write-Log "Starting 371GPT infrastructure deployment" "INFO"
+Write-Log "Log file: $logFile" "INFO"
+
+# Verify prerequisites
+if (-not (Test-Prerequisites)) {
+    Write-Log "Prerequisite check failed. Deployment cannot continue." "ERROR"
     exit 1
 }
 
-# Ensure we're in the right directory
-try {
-    if (-not (Test-Path -Path "terraform.tfvars")) {
-        Handle-Error "terraform.tfvars not found. Please run this script from the project root directory."
+# Validate credentials
+if (-not (Test-Credentials)) {
+    if (-not $Force) {
+        Write-Log "Credential validation failed. Use -Force to override." "ERROR"
+        exit 1
     }
-} catch {
-    Handle-Error "Error checking for terraform.tfvars: $_"
+    Write-Log "Proceeding despite credential validation failure due to -Force flag" "WARNING"
 }
 
-# Initialize Terraform if needed
-Write-Host "Initializing Terraform..."
-try {
-    terraform init
-} catch {
-    Handle-Error "Failed to initialize Terraform: $_"
+# Initialize Terraform
+if (-not (Initialize-TerraformEnvironment)) {
+    Write-Log "Terraform initialization failed. Deployment cannot continue." "ERROR"
+    exit 1
 }
 
-# Plan the deployment
-Write-Host "Planning Terraform deployment..."
-try {
-    terraform plan -out tfplan
-} catch {
-    Handle-Error "Failed to create Terraform plan: $_"
+# Validate Terraform configuration
+if (-not (Test-TerraformConfiguration)) {
+    Write-Log "Terraform configuration validation failed. Deployment cannot continue." "ERROR"
+    exit 1
 }
 
-# Confirm deployment
-$confirmation = Read-Host "Do you want to proceed with the deployment? (y/N)"
-if ($confirmation -ne "y") {
-    Write-Host "Deployment cancelled."
-    exit 0
+# Create Terraform plan
+if (-not (New-TerraformPlan)) {
+    Write-Log "Terraform plan creation failed. Deployment cannot continue." "ERROR"
+    exit 1
 }
 
-# Apply the Terraform configuration
-Write-Host "Applying Terraform configuration..."
-try {
-    terraform apply "tfplan"
-} catch {
-    Handle-Error "Failed to apply Terraform configuration: $_"
+# Apply Terraform plan
+$applySuccess = Invoke-TerraformApply
+
+# Handle failure
+if (-not $applySuccess) {
+    Write-Log "Terraform apply failed." "ERROR"
+    Remove-Resources
+    Show-Summary -Success $false
+    exit 1
 }
 
-# Get outputs
-Write-Host "Retrieving deployment information..."
-try {
-    $outputs = terraform output -json | ConvertFrom-Json
-    
-    # Store outputs in environment variables
-    foreach ($output in $outputs.PSObject.Properties) {
-        $value = $output.Value.value
-        [Environment]::SetEnvironmentVariable($output.Name, $value, "Process")
-        Write-Host "Set $($output.Name) = $value"
-    }
-} catch {
-    Write-Warning "Failed to process Terraform outputs: $_"
-}
+# Show deployment summary
+Show-Summary -Success $true
 
-# Run post-deployment tasks
-Write-Host "Running post-deployment tasks..."
+# Display information about accessing the infrastructure
+Write-Log "To access your infrastructure:" "INFO"
+Write-Log "1. The IP addresses can be found in the Terraform output above" "INFO"
+Write-Log "2. Use the SSH private key corresponding to the public key in terraform.tfvars" "INFO"
+Write-Log "3. Connect using: ssh -i <private_key_path> user@<instance_ip>" "INFO"
 
-# Check if agents need to be configured
-if (Test-Path -Path "agents-setup.yml") {
-    Write-Host "Configuring agents..."
-    try {
-        # Add agent configuration steps here
-        # This might include setting up SSH keys, installing dependencies, etc.
-    } catch {
-        Write-Warning "Failed to configure agents: $_"
-    }
-}
-
-Write-Host "Deployment completed successfully!"
-Write-Host "Next steps:"
-Write-Host "1. Verify the infrastructure is running correctly"
-Write-Host "2. Configure your application settings"
-Write-Host "3. Set up monitoring and alerts"
-
-# Display cleanup instructions
-Write-Host "`nTo clean up the infrastructure, run:"
-Write-Host "terraform destroy"
+Write-Log "Deployment completed" "SUCCESS"
